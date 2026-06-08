@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情侶專屬點數卡</title>
+    <style>
+        :root {
+            --primary-color: #ff6b81;
+            --bg-color: #f8f9fa;
+            --text-color: #2f3542;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+        h1 { color: var(--primary-color); font-size: 24px; }
+        .balance-card {
+            background: linear-gradient(135deg, #ff7e5f, #feb47b);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+        .balance-card h2 { margin: 0; font-size: 36px; }
+        .balance-card p { margin: 5px 0 0 0; opacity: 0.9; }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-scan { background-color: var(--primary-color); color: white; }
+        .btn-action { background-color: #eccc68; color: #2f3542; }
+        .btn:active { transform: scale(0.98); }
+        
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f1f2f6;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #57606f;
+            min-height: 50px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>👩‍❤️‍👨 情侶專屬點數卡</h1>
+    
+    <div class="balance-card">
+        <p>目前餘額 (點)</p>
+        <h2 id="pointDisplay">---</h2>
+        <p id="userDisplay">請先感應卡片</p>
+    </div>
+
+    <button class="btn btn-scan" onclick="startScan('check')">💳 查詢餘額</button>
+    <button class="btn btn-action" onclick="startScan('add')">➕ 賺取點數 (加點)</button>
+    <button class="btn btn-action" onclick="startScan('sub')">➖ 兌換獎勵 (扣點)</button>
+
+    <div id="log">系統狀態：等待操作...</div>
+</div>
+
+<script>
+    // 取得畫面上需要更新的元素
+    const logEl = document.getElementById('log');
+    const pointEl = document.getElementById('pointDisplay');
+    const userEl = document.getElementById('userDisplay');
+
+    function updateLog(msg) {
+        logEl.textContent = msg;
+    }
+
+    // 模擬資料庫操作 (使用 localStorage)
+    // 實戰中請將此處替換為 fetch('您的 Python API 網址')
+    function processTransaction(uid, actionType) {
+        let currentPoints = parseInt(localStorage.getItem(uid)) || 0;
+        let userName = "親愛的"; // 實戰中由資料庫回傳
+
+        if (actionType === 'check') {
+            updateLog(`查詢成功！卡號: ${uid}`);
+        } else if (actionType === 'add') {
+            // 範例：一起爬山或體貼行為
+            let amount = parseInt(prompt("請輸入要增加的點數：", "50"));
+            if (amount && !isNaN(amount)) {
+                currentPoints += amount;
+                localStorage.setItem(uid, currentPoints);
+                updateLog(`加點成功！增加了 ${amount} 點`);
+            }
+        } else if (actionType === 'sub') {
+            // 範例：換取吃日式燒肉大餐
+            let amount = parseInt(prompt("請輸入要扣除的點數：", "150"));
+            if (amount && !isNaN(amount)) {
+                if (currentPoints >= amount) {
+                    currentPoints -= amount;
+                    localStorage.setItem(uid, currentPoints);
+                    updateLog(`扣點成功！消費了 ${amount} 點`);
+                } else {
+                    updateLog("❌ 餘額不足，無法扣點！");
+                }
+            }
+        }
+        
+        // 更新畫面數字
+        pointEl.textContent = currentPoints;
+        userEl.textContent = `持卡人：${userName}`;
+    }
+
+    // 啟動 Web NFC 感應
+    async function startScan(actionType) {
+        if (!("NDEFReader" in window)) {
+            updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。請使用 Android 手機的 Chrome 瀏覽器。");
+            return;
+        }
+
+        try {
+            updateLog("⏳ 請將卡片靠近手機背面感應區...");
+            const ndef = new NDEFReader();
+            await ndef.scan();
+
+            ndef.onreading = event => {
+                const uid = event.serialNumber; // 取得卡片唯一識別碼 (UID)
+                navigator.vibrate([100, 50, 100]); // 成功讀取時手機震動回饋
+                processTransaction(uid, actionType);
+            };
+
+            ndef.onreadingerror = () => {
+                updateLog("❌ 讀取失敗，請重新感應。");
+            };
+        } catch (error) {
+            updateLog(`❌ 啟動 NFC 失敗：${error.message} (請確認是否開啟 NFC 功能及 HTTPS 環境)`);
+        }
+    }
+</script>
+
+</body>
+</html>
