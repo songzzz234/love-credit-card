@@ -84,7 +84,9 @@
 </div>
 
 <script>
-    // 取得畫面上需要更新的元素
+    // 【重要】請將下方網址替換為您部署的 Google Apps Script 網址
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby5XG-3QRyjPGPncwTaGudM_ZfJbngmnCQcEgKeuzilwC-radrYOu4NIdrc83oU9UsvAg/exec";
+
     const logEl = document.getElementById('log');
     const pointEl = document.getElementById('pointDisplay');
     const userEl = document.getElementById('userDisplay');
@@ -93,46 +95,44 @@
         logEl.textContent = msg;
     }
 
-    // 模擬資料庫操作 (使用 localStorage)
-    // 實戰中請將此處替換為 fetch('您的 Python API 網址')
-    function processTransaction(uid, actionType) {
-        let currentPoints = parseInt(localStorage.getItem(uid)) || 0;
-        let userName = "親愛的"; // 實戰中由資料庫回傳
+    async function processTransaction(uid, actionType) {
+        updateLog("⏳ 連線至雲端同步中...");
+        let amount = 0;
 
-        if (actionType === 'check') {
-            updateLog(`查詢成功！卡號: ${uid}`);
-        } else if (actionType === 'add') {
-            // 範例：一起爬山或體貼行為
-            let amount = parseInt(prompt("請輸入要增加的點數：", "50"));
-            if (amount && !isNaN(amount)) {
-                currentPoints += amount;
-                localStorage.setItem(uid, currentPoints);
-                updateLog(`加點成功！增加了 ${amount} 點`);
-            }
+        if (actionType === 'add') {
+            amount = parseInt(prompt("請輸入要增加的點數：", "50"));
+            if (!amount || isNaN(amount)) return updateLog("⚠️ 已取消加點操作");
         } else if (actionType === 'sub') {
-            // 範例：換取吃日式燒肉大餐
-            let amount = parseInt(prompt("請輸入要扣除的點數：", "150"));
-            if (amount && !isNaN(amount)) {
-                if (currentPoints >= amount) {
-                    currentPoints -= amount;
-                    localStorage.setItem(uid, currentPoints);
-                    updateLog(`扣點成功！消費了 ${amount} 點`);
-                } else {
-                    updateLog("❌ 餘額不足，無法扣點！");
-                }
-            }
+            amount = parseInt(prompt("請輸入要扣除的點數：", "150"));
+            if (!amount || isNaN(amount)) return updateLog("⚠️ 已取消扣點操作");
         }
-        
-        // 更新畫面數字
-        pointEl.textContent = currentPoints;
-        userEl.textContent = `持卡人：${userName}`;
+
+        try {
+            const response = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ uid: uid, actionType: actionType, amount: amount })
+            });
+
+            const result = await response.json();
+
+            if (result.status === "success") {
+                pointEl.textContent = result.points;
+                userEl.textContent = `持卡人：${result.name}`;
+                
+                if (actionType === 'check') updateLog(`✅ 查詢成功！卡號: ${uid}`);
+                else updateLog(`✅ 交易成功！最新餘額：${result.points} 點`);
+            } else {
+                updateLog(`❌ 系統回報：${result.message} (讀取到的卡號為: ${uid})`);
+            }
+        } catch (error) {
+            updateLog("❌ 網路連線失敗，請檢查網路狀態或 GAS 網址是否正確。");
+        }
     }
 
-    // 啟動 Web NFC 感應
     async function startScan(actionType) {
         if (!("NDEFReader" in window)) {
-            updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。請使用 Android 手機的 Chrome 瀏覽器。");
-            return;
+            return updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。請使用 Android 設備的 Chrome 瀏覽器。");
         }
 
         try {
@@ -141,16 +141,14 @@
             await ndef.scan();
 
             ndef.onreading = event => {
-                const uid = event.serialNumber; // 取得卡片唯一識別碼 (UID)
-                navigator.vibrate([100, 50, 100]); // 成功讀取時手機震動回饋
+                const uid = event.serialNumber; 
+                navigator.vibrate([100, 50, 100]); 
                 processTransaction(uid, actionType);
             };
 
-            ndef.onreadingerror = () => {
-                updateLog("❌ 讀取失敗，請重新感應。");
-            };
+            ndef.onreadingerror = () => updateLog("❌ 讀取失敗，請重新感應。");
         } catch (error) {
-            updateLog(`❌ 啟動 NFC 失敗：${error.message} (請確認是否開啟 NFC 功能及 HTTPS 環境)`);
+            updateLog(`❌ 啟動 NFC 失敗，請確認已開啟手機 NFC 功能。`);
         }
     }
 </script>
