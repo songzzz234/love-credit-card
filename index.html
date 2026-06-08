@@ -28,6 +28,22 @@
             box-shadow: 0 10px 20px rgba(0,0,0,0.05);
         }
         h1 { color: var(--primary-color); font-size: 24px; }
+        
+        /* 密碼鎖區塊樣式 */
+        #loginSection { margin-top: 50px; }
+        .pwd-input {
+            width: 80%;
+            padding: 12px;
+            font-size: 18px;
+            text-align: center;
+            border: 2px solid #dfe4ea;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        /* 主系統區塊預設隱藏 */
+        #appSection { display: none; }
+        
         .balance-card {
             background: linear-gradient(135deg, #ff7e5f, #feb47b);
             color: white;
@@ -71,30 +87,73 @@
 <div class="container">
     <h1>👩‍❤️‍👨 情侶專屬點數卡</h1>
     
-    <div class="balance-card">
-        <p>目前餘額 (點)</p>
-        <h2 id="pointDisplay">---</h2>
-        <p id="userDisplay">請先感應卡片</p>
+    <div id="loginSection">
+        <p>🔒 請輸入專屬密碼解鎖系統</p>
+        <input type="password" id="pwdInput" class="pwd-input" placeholder="輸入密碼">
+        <button class="btn btn-scan" onclick="verifyPassword()" id="loginBtn">驗證身分</button>
+        <p id="loginMsg" style="color:red; font-size:14px;"></p>
     </div>
 
-    <button class="btn btn-scan" onclick="startScan('check')">💳 查詢餘額</button>
-    <button class="btn btn-action" onclick="startScan('add')">➕ 賺取點數 (加點)</button>
-    <button class="btn btn-action" onclick="startScan('sub')">➖ 兌換獎勵 (扣點)</button>
+    <div id="appSection">
+        <div class="balance-card">
+            <p>目前餘額 (點)</p>
+            <h2 id="pointDisplay">---</h2>
+            <p id="userDisplay">請先感應卡片</p>
+        </div>
 
-    <div id="log">系統狀態：等待操作...</div>
+        <button class="btn btn-scan" onclick="startScan('check')">💳 查詢餘額</button>
+        <button class="btn btn-action" onclick="startScan('add')">➕ 賺取點數 (加點)</button>
+        <button class="btn btn-action" onclick="startScan('sub')">➖ 兌換獎勵 (扣點)</button>
+
+        <div id="log">系統狀態：等待操作...</div>
+    </div>
 </div>
 
 <script>
-    // 【重要】請將下方網址替換為您部署的 Google Apps Script 網址
-    const GAS_URL = "https://script.google.com/macros/s/AKfycby5XG-3QRyjPGPncwTaGudM_ZfJbngmnCQcEgKeuzilwC-radrYOu4NIdrc83oU9UsvAg/exec";
+    // 【重要】請將下方網址替換為您部署的 GAS 網址
+    const GAS_URL = "https://script.google.com/macros/s/您的專屬ID/exec";
 
+    // 介面切換邏輯
+    async function verifyPassword() {
+        const pwd = document.getElementById('pwdInput').value;
+        const msgEl = document.getElementById('loginMsg');
+        const loginBtn = document.getElementById('loginBtn');
+        
+        if (!pwd) return msgEl.textContent = "密碼不可為空！";
+        
+        loginBtn.textContent = "驗證中...";
+        loginBtn.disabled = true;
+
+        try {
+            const response = await fetch(GAS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ actionType: 'login', password: pwd })
+            });
+            const result = await response.json();
+
+            if (result.status === "success") {
+                // 驗證成功，隱藏登入區，顯示主系統
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('appSection').style.display = 'block';
+            } else {
+                msgEl.textContent = "❌ " + result.message;
+                loginBtn.textContent = "驗證身分";
+                loginBtn.disabled = false;
+            }
+        } catch (error) {
+            msgEl.textContent = "❌ 網路連線失敗，請稍後再試。";
+            loginBtn.textContent = "驗證身分";
+            loginBtn.disabled = false;
+        }
+    }
+
+    // 以下為原有的 NFC 刷卡邏輯
     const logEl = document.getElementById('log');
     const pointEl = document.getElementById('pointDisplay');
     const userEl = document.getElementById('userDisplay');
 
-    function updateLog(msg) {
-        logEl.textContent = msg;
-    }
+    function updateLog(msg) { logEl.textContent = msg; }
 
     async function processTransaction(uid, actionType) {
         updateLog("⏳ 連線至雲端同步中...");
@@ -114,39 +173,34 @@
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({ uid: uid, actionType: actionType, amount: amount })
             });
-
             const result = await response.json();
 
             if (result.status === "success") {
                 pointEl.textContent = result.points;
                 userEl.textContent = `持卡人：${result.name}`;
-                
                 if (actionType === 'check') updateLog(`✅ 查詢成功！卡號: ${uid}`);
                 else updateLog(`✅ 交易成功！最新餘額：${result.points} 點`);
             } else {
-                updateLog(`❌ 系統回報：${result.message} (讀取到的卡號為: ${uid})`);
+                updateLog(`❌ 系統回報：${result.message}`);
             }
         } catch (error) {
-            updateLog("❌ 網路連線失敗，請檢查網路狀態或 GAS 網址是否正確。");
+            updateLog("❌ 網路連線失敗。");
         }
     }
 
     async function startScan(actionType) {
         if (!("NDEFReader" in window)) {
-            return updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。請使用 Android 設備的 Chrome 瀏覽器。");
+            return updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。");
         }
-
         try {
             updateLog("⏳ 請將卡片靠近手機背面感應區...");
             const ndef = new NDEFReader();
             await ndef.scan();
-
             ndef.onreading = event => {
                 const uid = event.serialNumber; 
                 navigator.vibrate([100, 50, 100]); 
                 processTransaction(uid, actionType);
             };
-
             ndef.onreadingerror = () => updateLog("❌ 讀取失敗，請重新感應。");
         } catch (error) {
             updateLog(`❌ 啟動 NFC 失敗，請確認已開啟手機 NFC 功能。`);
