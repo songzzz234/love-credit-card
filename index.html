@@ -110,10 +110,10 @@
 </div>
 
 <script>
-    // 【重要】請將下方網址替換為您部署的 GAS 網址
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbyumNfUz1Biv_dkhEXjNVDB2fZrG_GYk5iDJl7tRGLiIoAOkJ8NJpl2_zegVRFA3aX80w/exec";
+   // 【重要】請將下方網址替換為您部署的 GAS 網址
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby5XG-3QRyjPGPncwTaGudM_ZfJbngmnCQcEgKeuzilwC-radrYOu4NIdrc83oU9UsvAg/exec";
 
-    // 介面切換邏輯
+    // --- 密碼解鎖邏輯 ---
     async function verifyPassword() {
         const pwd = document.getElementById('pwdInput').value;
         const msgEl = document.getElementById('loginMsg');
@@ -133,7 +133,6 @@
             const result = await response.json();
 
             if (result.status === "success") {
-                // 驗證成功，隱藏登入區，顯示主系統
                 document.getElementById('loginSection').style.display = 'none';
                 document.getElementById('appSection').style.display = 'block';
             } else {
@@ -148,15 +147,19 @@
         }
     }
 
-    // 以下為原有的 NFC 刷卡邏輯
+    // --- NFC 刷卡與點數處理邏輯 (已修復 Bug) ---
     const logEl = document.getElementById('log');
     const pointEl = document.getElementById('pointDisplay');
     const userEl = document.getElementById('userDisplay');
 
+    // 【新增】全域變數：確保讀卡機只啟動一次，並記住當下的動作
+    let currentAction = ''; 
+    let isScanning = false; 
+    let ndef = null;
+
     function updateLog(msg) { logEl.textContent = msg; }
 
     async function processTransaction(uid, actionType) {
-        updateLog("⏳ 連線至雲端同步中...");
         let amount = 0;
 
         if (actionType === 'add') {
@@ -166,6 +169,8 @@
             amount = parseInt(prompt("請輸入要扣除的點數：", "150"));
             if (!amount || isNaN(amount)) return updateLog("⚠️ 已取消扣點操作");
         }
+
+        updateLog("⏳ 連線至雲端同步中...");
 
         try {
             const response = await fetch(GAS_URL, {
@@ -178,7 +183,7 @@
             if (result.status === "success") {
                 pointEl.textContent = result.points;
                 userEl.textContent = `持卡人：${result.name}`;
-                if (actionType === 'check') updateLog(`✅ 查詢成功！卡號: ${uid}`);
+                if (actionType === 'check') updateLog(`✅ 查詢成功！`);
                 else updateLog(`✅ 交易成功！最新餘額：${result.points} 點`);
             } else {
                 updateLog(`❌ 系統回報：${result.message}`);
@@ -188,21 +193,35 @@
         }
     }
 
+    // 啟動或更新掃描動作
     async function startScan(actionType) {
         if (!("NDEFReader" in window)) {
             return updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。");
         }
+
+        // 1. 更新目前準備執行的動作
+        currentAction = actionType; 
+        let actionName = currentAction === 'add' ? '加點' : (currentAction === 'sub' ? '扣點' : '查詢');
+        updateLog(`⏳ 準備【${actionName}】，請將卡片靠近手機背面...`);
+
         try {
-            updateLog("⏳ 請將卡片靠近手機背面感應區...");
-            const ndef = new NDEFReader();
-            await ndef.scan();
-            ndef.onreading = event => {
-                const uid = event.serialNumber; 
-                navigator.vibrate([100, 50, 100]); 
-                processTransaction(uid, actionType);
-            };
-            ndef.onreadingerror = () => updateLog("❌ 讀取失敗，請重新感應。");
+            // 2. 如果是第一次點擊，才建立並啟動讀卡機
+            if (!isScanning) {
+                ndef = new NDEFReader();
+                await ndef.scan();
+                isScanning = true;
+
+                // 設定感應到卡片時的動作
+                ndef.onreading = event => {
+                    const uid = event.serialNumber; 
+                    navigator.vibrate([100, 50, 100]); 
+                    // 執行交易時，使用當下最新的 currentAction
+                    processTransaction(uid, currentAction);
+                };
+                ndef.onreadingerror = () => updateLog("❌ 讀取失敗，請重新感應。");
+            }
         } catch (error) {
+            isScanning = false;
             updateLog(`❌ 啟動 NFC 失敗，請確認已開啟手機 NFC 功能。`);
         }
     }
