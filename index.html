@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>嘎嘎豬の小金庫</title>
+    <title>情侶專屬點數卡</title>
     <meta name="robots" content="noindex, nofollow">
     <style>
         :root {
@@ -85,7 +85,7 @@
 <body>
 
 <div class="container">
-    <h1>👩‍❤️‍👨 嘎嘎豬の小金庫</h1>
+    <h1>👩‍❤️‍👨 情侶專屬點數卡</h1>
     
     <div id="loginSection">
         <p>🔒 請輸入專屬密碼解鎖系統</p>
@@ -110,8 +110,8 @@
 </div>
 
 <script>
-// 【重要】請將下方網址替換為您部署的 GAS 網址
-    const GAS_URL = "https://script.google.com/macros/s/AKfycby5XG-3QRyjPGPncwTaGudM_ZfJbngmnCQcEgKeuzilwC-radrYOu4NIdrc83oU9UsvAg/exec";
+    // 【重要】請將下方網址替換為您部署的 GAS 網址
+    const GAS_URL = "https://script.google.com/macros/s/您的專屬ID/exec";
 
     // --- 密碼解鎖邏輯 ---
     async function verifyPassword() {
@@ -147,12 +147,11 @@
         }
     }
 
-    // --- NFC 刷卡與點數處理邏輯 (已修復 Bug) ---
+    // --- NFC 刷卡與點數處理邏輯 (單一讀卡機模式) ---
     const logEl = document.getElementById('log');
     const pointEl = document.getElementById('pointDisplay');
     const userEl = document.getElementById('userDisplay');
 
-    // 【新增】全域變數：確保讀卡機只啟動一次，並記住當下的動作
     let currentAction = ''; 
     let isScanning = false; 
     let ndef = null;
@@ -193,29 +192,24 @@
         }
     }
 
-    // 啟動或更新掃描動作
     async function startScan(actionType) {
         if (!("NDEFReader" in window)) {
             return updateLog("❌ 錯誤：您的瀏覽器不支援 Web NFC。");
         }
 
-        // 1. 更新目前準備執行的動作
         currentAction = actionType; 
         let actionName = currentAction === 'add' ? '加點' : (currentAction === 'sub' ? '扣點' : '查詢');
         updateLog(`⏳ 準備【${actionName}】，請將卡片靠近手機背面...`);
 
         try {
-            // 2. 如果是第一次點擊，才建立並啟動讀卡機
             if (!isScanning) {
                 ndef = new NDEFReader();
                 await ndef.scan();
                 isScanning = true;
 
-                // 設定感應到卡片時的動作
                 ndef.onreading = event => {
                     const uid = event.serialNumber; 
                     navigator.vibrate([100, 50, 100]); 
-                    // 執行交易時，使用當下最新的 currentAction
                     processTransaction(uid, currentAction);
                 };
                 ndef.onreadingerror = () => updateLog("❌ 讀取失敗，請重新感應。");
